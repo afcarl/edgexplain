@@ -124,13 +124,17 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
     tH = theano.shared(H,name="H")
     tW = theano.shared(W,name="W")
     tA = theano.shared(A, name="A")
-    #tE = T.sqrt(((tX-T.dot(tW,tH))**2).sum())
-    #tCost = T.sqrt(((tX-T.dot(tW,tH))**2).sum()) + lambda1 * T.abs_(tW).sum() + lambda2 * (tH**2).sum() 
-    #we don't need the sqrt maximizing x^2 is similar to maximizing sqrt(x^2)... but it becomes very big then inf problem
-    #tCost = ((tX-T.dot(tW,tH))**2).sum()
+    '''
+    Note: we don't need the sqrt in the cost function maximizing x^2 is similar to maximizing sqrt(x^2)... 
+    but the function becomes very big and becomes inf if we don't do the sqrt.
+    One possible solution is to divide it by a very big number to avoid inf.
+    '''
+    tEmbedding = T.sqrt(((tX-T.dot(tW,tH))**2).sum())
+    #tEmbedding = ((tX-T.dot(tW,tH))**2).sum()/10000
     tRegularizer = lambda1 * T.abs_(tW).sum() + lambda2 * (tH**2).sum() 
     tEdgexplain = lambda3 * (T.log(1.0 / (1 + T.exp(-(c + alpha * tA * T.dot(tW, tW.transpose())))))).sum()
-    tCost = T.sqrt(((tX-T.dot(tW,tH))**2).sum()) +  tEdgexplain + tRegularizer
+    
+    tCost = tEmbedding +  tEdgexplain + tRegularizer
     tGamma = T.scalar(name="learning_rate")
     tgrad_H, tgrad_W = T.grad(cost=tCost, wrt=[tH, tW]) 
 
