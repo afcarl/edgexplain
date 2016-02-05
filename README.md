@@ -10,7 +10,8 @@ Comparing several algorithms for non-negative matrix factorisation:
 
 
 
-USAGE : NMF.py <matrixDim> <latentFactors> <iter>
+USAGE : Python nmf.py <matrixDim> <latentFactors> <iter>
+
 The input matrix X is assumed to be a square matrix for simplicity, the algorithms work with any type of input matrix regardless.
 
 
