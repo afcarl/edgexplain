@@ -11,6 +11,9 @@ import time
 import sys
 
 def NMFN(X,r,iterations,H=None,W=None):
+    '''
+    numpy implementation
+    '''
     rng = np.random
     n = np.size(X,0)
     m = np.size(X,1)
@@ -110,7 +113,8 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
     rng = np.random
     n = np.size(X,0)
     m = np.size(X,1)
-    iterations *= 4
+    #because we have more terms in the cost function, the model converges slower and needs more iterations.
+    iterations *= 6
     #coefficients
     lambda1 = 0.001
     lambda2 = 0.001
@@ -158,7 +162,7 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
     return tW.get_value(),tH.get_value()
 if __name__=="__main__":
     print "USAGE : NMF.py <matrixDim> <latentFactors> <iter>"
-    print 'input matrix X is assumed to be a square for simplicity, the algorithms work anyway'
+    print 'input matrix X is assumed to be a square for simplicity, the algorithms work with any type of input matrix.'
     
     n = int(sys.argv[1])
     r = int(sys.argv[2])
