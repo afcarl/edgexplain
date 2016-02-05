@@ -76,11 +76,9 @@ def NMF_regularized(X,r,iterations,H=None,W=None, learning_rate=0.1):
     tX = theano.shared(X.astype(theano.config.floatX),name="X")
     tH = theano.shared(H,name="H")
     tW = theano.shared(W,name="W")
-    #tE = T.sqrt(((tX-T.dot(tW,tH))**2).sum())
-    tCost = T.sqrt(((tX-T.dot(tW,tH))**2).sum()) + lambda1 * T.abs_(tW).sum() + lambda2 * (tH**2).sum() 
-    #we don't need the sqrt maximizing x^2 is similar to maximizing sqrt(x^2)... but it becomes very big then inf problem
-    #tCost = ((tX-T.dot(tW,tH))**2).sum()
-    #tCost = T.sqrt(((tX-T.dot(tW,tH))**2).sum()) + lambda1 * T.abs_(tW).sum() + lambda2 * (tH**2).sum() 
+    tRegularizer = lambda1 * T.abs_(tW).sum() + lambda2 * (tH**2).sum() 
+    tEmbedding = T.sqrt(((tX-T.dot(tW,tH))**2).sum())
+    tCost = tEmbedding + tRegularizer
     tGamma = T.scalar(name="learning_rate")
     tgrad_H, tgrad_W = T.grad(cost=tCost, wrt=[tH, tW]) 
 
@@ -118,6 +116,7 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
     #coefficients
     lambda1 = 0.001
     lambda2 = 0.001
+    #note if lambda3 is high the model doesn't converge
     lambda3 = 0.0001
     if(H is None):
         H = rng.random((r,m)).astype(theano.config.floatX)
