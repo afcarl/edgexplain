@@ -109,8 +109,8 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
     A is the adjacancy matrix (document-document relations)
     '''
     rng = np.random
-    n = np.size(X,0)
-    m = np.size(X,1)
+    n = X.shape[0]
+    m = X.shape[1]
     #because we have more terms in the cost function, the model converges slower and needs more iterations.
     iterations *= 6
     #coefficients
@@ -122,20 +122,31 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
         H = rng.random((r,m)).astype(theano.config.floatX)
     if(W is None):
         W = rng.random((n,r)).astype(theano.config.floatX)
-
+    
+    use_regularized_ridge_regression_for_h = False
+    I = np.identity(r).astype(theano.config.floatX)
+    tI = theano.shared(I, name="I")
     tX = theano.shared(X.astype(theano.config.floatX),name="X")
     tH = theano.shared(H,name="H")
     tW = theano.shared(W,name="W")
     tA = theano.shared(A, name="A")
+    
+    tL1 = T.sum(abs(tW))
+    smooth_out_L1 = False
+    if smooth_out_L1:
+        epsilon = 0.1
+        tL1 = T.sqrt(tW ** 2 + epsilon).sum()
+    tL2 = T.sum(tH ** 2)
     '''
     Note: we don't need the sqrt in the cost function maximizing x^2 is similar to maximizing sqrt(x^2)... 
     but the function becomes very big and becomes inf if we don't do the sqrt.
     One possible solution is to divide it by a very big number to avoid inf.
     '''
     tEmbedding = T.sqrt(((tX-T.dot(tW,tH))**2).sum())
-    #tEmbedding = ((tX-T.dot(tW,tH))**2).sum()/10000
-    tRegularizer = lambda1 * T.abs_(tW).sum() + lambda2 * (tH**2).sum() 
-    tEdgexplain = lambda3 * (T.log(1.0 / (1 + T.exp(-(c + alpha * tA * T.dot(tW, tW.transpose())))))).sum()
+    #tEmbedding = ((tX-T.dot(tW,tH))**2).sum()
+    tRegularizer = lambda1 * tL1 + lambda2 * tL2 
+    #tEdgexplain = lambda3 * (T.log(1.0 / (1 + T.exp(-(c + alpha * tA * T.dot(tW, tW.transpose())))))).sum()
+    tEdgexplain = lambda3 * (T.log(T.nnet.sigmoid(c + alpha * tA * T.dot(tW, tW.transpose())))).sum()
     
     tCost = tEmbedding +  tEdgexplain + tRegularizer
     tGamma = T.scalar(name="learning_rate")
@@ -146,6 +157,12 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
             outputs=[tCost],
             updates={tH:tH - tGamma * tgrad_H},
             name="trainH")
+    trainHDirect = theano.function(
+            inputs=[],
+            outputs=[tCost],
+            updates={tH:T.dot(T.dot( T.inv(T.dot(tW.T, tW) + lambda2 * tI ), tW.T), tX)},
+            name="trainHDirect")                                   
+                        
     trainW = theano.function(
             inputs=[tGamma],
             outputs=[tCost],
@@ -153,7 +170,10 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
             name="trainW")
 
     for i in range(0,iterations):
-        tCostH = trainH(np.asarray(learning_rate,dtype=theano.config.floatX));
+        if use_regularized_ridge_regression_for_h:
+            tCostH = trainHDirect()
+        else:
+            tCostH = trainH(np.asarray(learning_rate,dtype=theano.config.floatX))
         tCostW = trainW(np.asarray(learning_rate,dtype=theano.config.floatX));
         print 'iter ' + str(i) + ':', np.linalg.norm(X-np.dot(tW.get_value(),tH.get_value()))
         
