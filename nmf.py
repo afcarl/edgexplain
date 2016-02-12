@@ -6,9 +6,50 @@ multiplicative update rules from Seung and Lee
 '''
 import theano
 import theano.tensor as T
+import theano.sparse as Ts
 import numpy as np
 import time
 import sys
+def MF_retrofitting(X, A, iterations, learning_rate=0.1, alpha=10, c=0):
+    '''
+    alpha and c are edgeexplain variables
+    A is the adjacancy matrix (document-document relations)
+    X is the word embeddings
+    X_bar is the hopefully improved word embeddings
+    '''
+    
+    #coefficients
+    lambda1 = 0.001
+    lambda2 = 0.001
+    #note if lambda3 is high the model doesn't converge
+    lambda3 = 0.0001
+    print 'initializing X_bar with X...'
+    X_bar = X.copy()
+    
+    #print 'creating the shared variables for X and X_bar'
+    tX = theano.shared(X.astype(theano.config.floatX),name="X")
+    tX_bar = theano.shared(X_bar.astype(theano.config.floatX),name="X_bar")
+    #print 'creating the shared variables for A'
+    tA = theano.shared(A, name="A")
+    
+    print 'defining cost functions and gradients'
+    tEmbedding = T.sum((tX-tX_bar)**2)
+    tEdgexplain = lambda3 * Ts.sp_sum(Ts.structured_log(Ts.structured_sigmoid(Ts.structured_add(Ts.basic.mul(tA, alpha * T.dot(tX_bar, tX_bar.transpose())), c))), sparse_grad=True)
+    
+    tCost = tEmbedding +  tEdgexplain 
+    tGamma = T.scalar(name="learning_rate")
+    tgrad_X_bar = T.grad(cost=tCost, wrt=tX_bar) 
+    
+    train_embedding = theano.function(
+            inputs=[tGamma],
+            outputs=[],
+            updates={tX_bar:tX_bar - tGamma * tgrad_X_bar},
+            name="train_embedding")
+    print 'training...'
+    for i in range(0,iterations):
+        train_embedding(np.asarray(learning_rate,dtype=theano.config.floatX))
+        print 'iter ' + str(i) + ':', np.linalg.norm(tX.get_value()-X_bar.get_value())
+    return X_bar.get_value()
 
 def NMFN(X,r,iterations,H=None,W=None):
     '''
@@ -179,6 +220,7 @@ def NMF_edgexplain(X, r, iterations, A, H=None, W=None, learning_rate=0.1, alpha
         
 
     return tW.get_value(),tH.get_value()
+
 if __name__=="__main__":
     print "USAGE : NMF.py <matrixDim> <latentFactors> <iter>"
     print 'input matrix X is assumed to be a square for simplicity, the algorithms work with any type of input matrix.'
