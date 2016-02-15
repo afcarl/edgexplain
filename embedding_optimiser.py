@@ -9,8 +9,12 @@ import theano.tensor as T
 import theano.sparse as Ts
 import numpy as np
 import time
+import scipy.sparse as sp
 import sys
-def MF_retrofitting(X, A, iterations, learning_rate=0.1, alpha=10, c=0):
+import itertools
+from scipy.special import expit as sigmoid
+import copy
+def edgexplain_retrofitting(X, A, iterations, learning_rate=0.1, alpha=10, c=0, lambda1=0.001):
     '''
     alpha and c are edgeexplain variables
     A is the adjacancy matrix (document-document relations)
@@ -18,11 +22,7 @@ def MF_retrofitting(X, A, iterations, learning_rate=0.1, alpha=10, c=0):
     X_bar is the hopefully improved word embeddings
     '''
     
-    #coefficients
-    lambda1 = 0.001
-    lambda2 = 0.001
-    #note if lambda3 is high the model doesn't converge
-    lambda3 = 0.0001
+
     print 'initializing X_bar with X...'
     X_bar = X.copy()
     
@@ -34,9 +34,14 @@ def MF_retrofitting(X, A, iterations, learning_rate=0.1, alpha=10, c=0):
     
     print 'defining cost functions and gradients'
     tEmbedding = T.sum((tX-tX_bar)**2)
-    tEdgexplain = lambda3 * Ts.sp_sum(Ts.structured_log(Ts.structured_sigmoid(Ts.structured_add(Ts.basic.mul(tA, alpha * T.dot(tX_bar, tX_bar.transpose())), c))), sparse_grad=True)
+    if sp.issparse(A):
+        #tEdgexplain = lambda1 * Ts.sp_sum(Ts.structured_log(Ts.structured_sigmoid(Ts.structured_add(Ts.basic.mul(tA, alpha * T.dot(tX_bar, tX_bar.transpose())), c))), sparse_grad=True)
+        tEdgexplain = lambda1 * T.sum(T.log(T.nnet.sigmoid(c + Ts.basic.mul(tA, alpha * T.dot(tX_bar, tX_bar.transpose())).toarray())))
+    else:
+        tEdgexplain = lambda1 * T.sum(T.log(T.nnet.sigmoid(c + alpha * A * T.dot(tX_bar, tX_bar.transpose()))))
     
-    tCost = tEmbedding +  tEdgexplain 
+    tCost = tEmbedding -  tEdgexplain 
+    #tCost = tEdgexplain
     tGamma = T.scalar(name="learning_rate")
     tgrad_X_bar = T.grad(cost=tCost, wrt=tX_bar) 
     
@@ -47,9 +52,29 @@ def MF_retrofitting(X, A, iterations, learning_rate=0.1, alpha=10, c=0):
             name="train_embedding")
     print 'training...'
     for i in range(0,iterations):
+        print 'iter ' + str(i) + ':', np.linalg.norm(tX.get_value()-tX_bar.get_value())
         train_embedding(np.asarray(learning_rate,dtype=theano.config.floatX))
-        print 'iter ' + str(i) + ':', np.linalg.norm(tX.get_value()-X_bar.get_value())
-    return X_bar.get_value()
+        #set possible inf or nan value to a large number or zero
+        tX_bar.set_value(np.nan_to_num(tX_bar.get_value()))
+        
+    return tX_bar.get_value()
+
+def iterative_edgexplain_retrofitting(X, A, iterations, c_k=None, alpha=10, c=0):
+    '''
+    alpha and c are edgeexplain variables
+    A is the adjacancy matrix (document-document relations)
+    X is the word embeddings
+    X_bar is the hopefully improved word embeddings
+    '''
+    if not c_k: 
+        c_k = 1.0 / X.shape[1]
+    X_new = copy.deepcopy(X)
+    for i in range(iterations):
+        print 'iter', i, 'divergence from original', np.linalg.norm(X - X_new)
+        iter_gradients = alpha * np.dot(sigmoid(-c - alpha * A * np.dot(X_new, X_new.transpose())), X_new)
+        X_new = X_new + c_k * iter_gradients 
+    return X_new
+        
 
 def NMFN(X,r,iterations,H=None,W=None):
     '''
